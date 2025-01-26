@@ -1,9 +1,7 @@
-{ pkgs ? import <nixpkgs> { }, unstable ? import <nixos-unstable> { } }:
+{ pkgs ? import <nixpkgs> { } }:
 
 pkgs.mkShell {
   nativeBuildInputs = with pkgs.buildPackages; [
-    unstable.zls
-
     # Raylib dependencies
     libGL
     xorg.libXcursor
