@@ -49,49 +49,77 @@ pub fn build(b: *std.Build) !void {
             // Unfortunately, rlz.emcc hardcodes the output directory which doesn't work with our weird multi-program setup.
             // After the build, we move the output to the correct location.
             const emc_output_dir = "zig-out" ++ std.fs.path.sep_str ++ "htmlout" ++ std.fs.path.sep_str;
-            const wanted_output_dir = try std.mem.concat(b.allocator, u8, &.{
-                emc_output_dir,
-                program.name,
+            const move_step = b.addInstallDirectory(.{
+                .source_dir = b.path(emc_output_dir),
+                .install_dir = .prefix,
+                .install_subdir = try std.fs.path.join(b.allocator, &.{ "public", program.name }),
             });
-            // TODO: handle windows?
-            var create_dir_step = b.addSystemCommand(&.{
-                "mkdir",
-                "-p",
-                wanted_output_dir,
-            });
-            create_dir_step.step.dependOn(&link_step.step);
-            var move_step = b.addSystemCommand(&.{
-                "mv",
-                emc_output_dir ++ "index.html",
-                emc_output_dir ++ "index.js",
-                emc_output_dir ++ "index.wasm",
-                wanted_output_dir,
-            });
-            move_step.step.dependOn(&create_dir_step.step);
+            move_step.step.dependOn(&link_step.step);
             b.getInstallStep().dependOn(&move_step.step);
+            const rm_emc_out = b.addRemoveDirTree(emc_output_dir);
+            rm_emc_out.step.dependOn(&move_step.step);
+            b.getInstallStep().dependOn(&rm_emc_out.step);
 
             const run_step = try rlz.emcc.emscriptenRunStep(b);
             run_step.step.dependOn(&link_step.step);
 
             const run_option = b.step(run_cmd_name, run_desc);
             run_option.dependOn(&run_step.step);
-            return;
+        } else {
+            const exe = b.addExecutable(.{
+                .name = program.name,
+                .root_source_file = b.path(path_to_main),
+                .optimize = optimize,
+                .target = target,
+            });
+
+            exe.linkLibrary(raylib_artifact);
+            exe.root_module.addImport("raylib", raylib);
+
+            const run_cmd = b.addRunArtifact(exe);
+            const run_step = b.step(run_cmd_name, run_desc);
+            run_step.dependOn(&run_cmd.step);
+
+            b.installArtifact(exe);
         }
-
-        const exe = b.addExecutable(.{
-            .name = program.name,
-            .root_source_file = b.path(path_to_main),
-            .optimize = optimize,
-            .target = target,
-        });
-
-        exe.linkLibrary(raylib_artifact);
-        exe.root_module.addImport("raylib", raylib);
-
-        const run_cmd = b.addRunArtifact(exe);
-        const run_step = b.step(run_cmd_name, run_desc);
-        run_step.dependOn(&run_cmd.step);
-
-        b.installArtifact(exe);
     }
+
+    if (target.query.os_tag == .emscripten) {
+        try installGithubPagesIndexHtml(b);
+    }
+}
+
+// This is kinda horrible but it works for now.
+fn installGithubPagesIndexHtml(b: *std.Build) !void {
+    var index_html = std.ArrayList(u8).init(b.allocator);
+    defer index_html.deinit();
+
+    try index_html.appendSlice("<!DOCTYPE html>\n");
+    try index_html.appendSlice("<html>\n");
+    try index_html.appendSlice("<head>\n");
+    try index_html.appendSlice("<title>zig-raylib-wasm-experiments</title>\n");
+    try index_html.appendSlice("</head>\n");
+
+    try index_html.appendSlice("<body>\n");
+    try index_html.appendSlice("<h1>zig-raylib-wasm-experiments</h1>\n");
+    try index_html.appendSlice("<ul>\n");
+
+    for (programs) |program| {
+        const program_name = program.name;
+        try index_html.appendSlice("<li><a href=\"");
+        try index_html.appendSlice(program_name);
+        try index_html.appendSlice("/index.html\">");
+        try index_html.appendSlice(program_name);
+        try index_html.appendSlice("</a></li>\n");
+    }
+
+    try index_html.appendSlice("</ul>\n");
+    try index_html.appendSlice("</body>\n");
+    try index_html.appendSlice("</html>\n");
+
+    const write_file_step = b.addWriteFiles();
+    const generated = write_file_step.add("github_pages_index.html", index_html.items);
+    const install_file_step = b.addInstallFile(generated, "public" ++ std.fs.path.sep_str ++ "index.html");
+    install_file_step.step.dependOn(&write_file_step.step);
+    b.getInstallStep().dependOn(&install_file_step.step);
 }
