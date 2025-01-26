@@ -26,7 +26,7 @@ pub fn main() anyerror!void {
 
     const screen_width = 800;
     const screen_height = 600;
-    const cell_size = 20;
+    const cell_size = 10;
     const width = screen_width / cell_size;
     const height = screen_height / cell_size;
 

@@ -1,9 +1,12 @@
 const std = @import("std");
 const rlz = @import("raylib-zig");
 
+const emc_output_dir = "zig-out" ++ std.fs.path.sep_str ++ "htmlout" ++ std.fs.path.sep_str;
+
 const programs = [_]struct {
     name: []const u8,
 }{
+    .{ .name = "helloworld" },
     .{ .name = "maze2d" },
 };
 
@@ -23,6 +26,8 @@ pub fn build(b: *std.Build) !void {
     const raylib = raylib_dep.module("raylib");
     const raylib_artifact = raylib_dep.artifact("raylib");
 
+    var last_move_step: ?*std.Build.Step = null;
+
     for (programs) |program| {
         const path_to_main = try std.mem.concat(b.allocator, u8, &.{ "src/", program.name, "/main.zig" });
         const run_cmd_name = try std.mem.concat(b.allocator, u8, &.{ "run_", program.name });
@@ -36,33 +41,31 @@ pub fn build(b: *std.Build) !void {
 
             // Note that raylib itself is not actually added to the exe_lib output file, so it also needs to be linked with emscripten.
             const link_step = try rlz.emcc.linkWithEmscripten(b, &[_]*std.Build.Step.Compile{ exe_lib, raylib_artifact });
-            //this lets your program access files like "resources/my-image.png":
             link_step.addArg("--embed-file");
             link_step.addArg("resources/");
-            link_step.addArg("-s");
             // Required on NixOS
             // See: https://github.com/NixOS/nixpkgs/issues/323598
+            link_step.addArg("-s");
             link_step.addArg("MINIFY_HTML=0");
-            // We don't even use the provided shell file.
-            // Instead, we use a minimal shell file that doesn't have any UI.
+            // We replace the default shell file with a minimal one that doesn't the full emscripten console.
             link_step.addArg("--shell-file");
             link_step.addArg("scripts/minimal_shell.html");
 
+            if (last_move_step) |*prev_step| {
+                link_step.step.dependOn(prev_step.*);
+            }
             b.getInstallStep().dependOn(&link_step.step);
 
             // Unfortunately, rlz.emcc hardcodes the output directory which doesn't work with our weird multi-program setup.
             // After the build, we move the output to the correct location.
-            const emc_output_dir = "zig-out" ++ std.fs.path.sep_str ++ "htmlout" ++ std.fs.path.sep_str;
             const move_step = b.addInstallDirectory(.{
                 .source_dir = b.path(emc_output_dir),
                 .install_dir = .prefix,
                 .install_subdir = try std.fs.path.join(b.allocator, &.{ "public", program.name }),
             });
+            last_move_step = &move_step.step;
             move_step.step.dependOn(&link_step.step);
             b.getInstallStep().dependOn(&move_step.step);
-            const rm_emc_out = b.addRemoveDirTree(emc_output_dir);
-            rm_emc_out.step.dependOn(&move_step.step);
-            b.getInstallStep().dependOn(&rm_emc_out.step);
 
             const run_step = try rlz.emcc.emscriptenRunStep(b);
             run_step.step.dependOn(&link_step.step);
@@ -90,6 +93,13 @@ pub fn build(b: *std.Build) !void {
 
     if (target.query.os_tag == .emscripten) {
         try installGithubPagesIndexHtml(b);
+
+        // After the last "last move step", we can also remove the temporary emc_output_dir.
+        if (last_move_step) |*prev_step| {
+            const rm_emc_out = b.addRemoveDirTree(emc_output_dir);
+            rm_emc_out.step.dependOn(prev_step.*);
+            b.getInstallStep().dependOn(&rm_emc_out.step);
+        }
     }
 }
 
