@@ -3,9 +3,9 @@ const testing = std.testing;
 
 const Allocator = std.mem.Allocator;
 
-pub fn Grid(comptime Cell: type) type {
-    const Index = i32;
+pub const Index = i32;
 
+pub fn Grid(comptime Cell: type) type {
     return struct {
         const Self = @This();
 
@@ -66,7 +66,7 @@ pub fn Grid(comptime Cell: type) type {
             }
         };
 
-        pub fn cell_iterator(self: Self) CellIterator {
+        pub fn cellIterator(self: Self) CellIterator {
             return .{ .grid = self, .y = 0, .x = 0 };
         }
     };
@@ -87,7 +87,7 @@ const Direction = enum(u4) {
         }
     }
 
-    pub fn dx(direction: Direction) i32 {
+    pub fn dx(direction: Direction) Index {
         switch (direction) {
             .North => return 0,
             .South => return 0,
@@ -96,7 +96,7 @@ const Direction = enum(u4) {
         }
     }
 
-    pub fn dy(direction: Direction) i32 {
+    pub fn dy(direction: Direction) Index {
         switch (direction) {
             .North => return -1,
             .South => return 1,
@@ -115,109 +115,127 @@ pub const MazeCell = struct {
         return self.walls != 0;
     }
 
-    pub fn set_wall(self: *MazeCell, direction: Direction) void {
+    pub fn setWall(self: *MazeCell, direction: Direction) void {
         self.walls |= @intFromEnum(direction);
     }
 
-    pub fn has_wall(self: MazeCell, direction: Direction) bool {
+    pub fn hasWall(self: MazeCell, direction: Direction) bool {
         return (self.walls & @intFromEnum(direction)) != 0;
     }
 };
 
-pub const Maze = Grid(MazeCell);
+pub const Maze = struct {
+    const Self = @This();
 
-fn random_step(rand: std.rand.Random, maze: *Maze, x: i32, y: i32) ?struct { i32, i32 } {
-    var directions = AllDirections;
-    rand.shuffle(Direction, &directions);
+    grid: Grid(MazeCell),
+    x: Index,
+    y: Index,
 
-    for (directions) |dir| {
-        const nx = x + dir.dx();
-        const ny = y + dir.dy();
-
-        if (nx >= 0 and nx < maze.width and ny >= 0 and ny < maze.height) {
-            // Check if the cell has already been visited
-            if (maze.get(nx, ny).visited()) {
-                continue;
-            }
-
-            var cell = maze.get(x, y);
-            cell.set_wall(dir);
-            maze.set(x, y, cell);
-            cell = maze.get(nx, ny);
-            cell.set_wall(dir.opposite());
-            maze.set(nx, ny, cell);
-
-            return .{ nx, ny };
-        }
+    pub fn init(allocator: Allocator, rand: std.rand.Random, width: Index, height: Index) !Self {
+        return .{
+            .grid = try Grid(MazeCell).init(allocator, width, height),
+            .x = rand.intRangeLessThan(Index, 0, width),
+            .y = rand.intRangeLessThan(Index, 0, height),
+        };
     }
 
-    return null;
-}
+    pub fn deinit(self: Maze, allocator: Allocator) void {
+        self.grid.deinit(allocator);
+    }
 
-// Look for unvisited cells with visited neighbors
-fn hunt(rand: std.rand.Random, maze: *Maze) ?struct { i32, i32 } {
-    var iter = maze.cell_iterator();
+    pub fn clear(self: *Maze, rand: std.rand.Random) void {
+        self.grid.clear();
+        self.x = rand.intRangeLessThan(Index, 0, self.grid.width);
+        self.y = rand.intRangeLessThan(Index, 0, self.grid.height);
+    }
 
-    while (iter.next()) |tuple| {
-        const x, const y, const c = tuple;
-        if (c.visited()) {
-            continue;
-        }
+    fn randomStep(self: *Self, rand: std.rand.Random) ?struct { Index, Index } {
+        var directions = AllDirections;
+        rand.shuffle(Direction, &directions);
 
-        var neighbors = [_]?Direction{null} ** 4;
-        var neighbors_count: usize = 0;
+        for (directions) |dir| {
+            const nx = self.x + dir.dx();
+            const ny = self.y + dir.dy();
 
-        // Set neighbors
-        if (x > 0 and maze.get(x - 1, y).visited()) {
-            neighbors[neighbors_count] = .West;
-            neighbors_count += 1;
-        }
-        if (x < maze.width - 1 and maze.get(x + 1, y).visited()) {
-            neighbors[neighbors_count] = .East;
-            neighbors_count += 1;
-        }
-        if (y > 0 and maze.get(x, y - 1).visited()) {
-            neighbors[neighbors_count] = .North;
-            neighbors_count += 1;
-        }
-        if (y < maze.height - 1 and maze.get(x, y + 1).visited()) {
-            neighbors[neighbors_count] = .South;
-            neighbors_count += 1;
-        }
-        if (neighbors_count == 0) {
-            continue;
-        }
+            if (nx >= 0 and nx < self.grid.width and ny >= 0 and ny < self.grid.height) {
+                // Check if the cell has already been visited
+                if (self.grid.get(nx, ny).visited()) {
+                    continue;
+                }
 
-        // Shuffle neighbors
-        rand.shuffle(?Direction, neighbors[0..neighbors_count]);
-        for (neighbors) |opt_dir| {
-            const dir = opt_dir orelse continue;
-            const nx = x + dir.dx();
-            const ny = y + dir.dy();
+                var cell = self.grid.get(self.x, self.y);
+                cell.setWall(dir);
+                self.grid.set(self.x, self.y, cell);
+                cell = self.grid.get(nx, ny);
+                cell.setWall(dir.opposite());
+                self.grid.set(nx, ny, cell);
 
-            var cell = maze.get(x, y);
-            cell.set_wall(dir);
-            maze.set(x, y, cell);
-            cell = maze.get(nx, ny);
-            cell.set_wall(dir.opposite());
-            maze.set(nx, ny, cell);
-
-            return .{ x, y };
+                return .{ nx, ny };
+            }
         }
 
         return null;
     }
 
-    return null;
-}
+    // Look for unvisited cells with visited neighbors
+    fn hunt(self: *Self, rand: std.rand.Random) ?struct { Index, Index } {
+        var iter = self.grid.cellIterator();
 
-pub fn randomize_maze(rand: std.rand.Random, maze: *Maze) void {
-    maze.clear();
+        while (iter.next()) |tuple| {
+            const x, const y, const c = tuple;
+            if (c.visited()) {
+                continue;
+            }
 
-    var x = rand.intRangeLessThan(i32, 0, maze.width);
-    var y = rand.intRangeLessThan(i32, 0, maze.height);
+            var neighbors = [_]?Direction{null} ** 4;
+            var neighbors_count: usize = 0;
 
-    while (true) {
-        x, y = random_step(rand, maze, x, y) orelse hunt(rand, maze) orelse break;
+            // Set neighbors
+            if (x > 0 and self.grid.get(x - 1, y).visited()) {
+                neighbors[neighbors_count] = .West;
+                neighbors_count += 1;
+            }
+            if (x < self.grid.width - 1 and self.grid.get(x + 1, y).visited()) {
+                neighbors[neighbors_count] = .East;
+                neighbors_count += 1;
+            }
+            if (y > 0 and self.grid.get(x, y - 1).visited()) {
+                neighbors[neighbors_count] = .North;
+                neighbors_count += 1;
+            }
+            if (y < self.grid.height - 1 and self.grid.get(x, y + 1).visited()) {
+                neighbors[neighbors_count] = .South;
+                neighbors_count += 1;
+            }
+            if (neighbors_count == 0) {
+                continue;
+            }
+
+            // Shuffle neighbors
+            rand.shuffle(?Direction, neighbors[0..neighbors_count]);
+            for (neighbors) |opt_dir| {
+                const dir = opt_dir orelse continue;
+                const nx = x + dir.dx();
+                const ny = y + dir.dy();
+
+                var cell = self.grid.get(x, y);
+                cell.setWall(dir);
+                self.grid.set(x, y, cell);
+                cell = self.grid.get(nx, ny);
+                cell.setWall(dir.opposite());
+                self.grid.set(nx, ny, cell);
+
+                return .{ x, y };
+            }
+
+            return null;
+        }
+
+        return null;
     }
-}
+
+    pub fn stepOnce(self: *Self, rand: std.rand.Random) bool {
+        self.x, self.y = self.randomStep(rand) orelse self.hunt(rand) orelse return true;
+        return false;
+    }
+};

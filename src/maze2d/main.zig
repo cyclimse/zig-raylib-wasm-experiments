@@ -25,29 +25,38 @@ pub fn main() anyerror!void {
     const rand = prng.random();
 
     const screen_width = 800;
-    const screen_height = 450;
-    const cell_size = 10;
+    const screen_height = 600;
+    const cell_size = 20;
     const width = screen_width / cell_size;
     const height = screen_height / cell_size;
 
-    rl.initWindow(screen_width, screen_height, "raylib-zig [core] example - basic window");
+    rl.initWindow(screen_width, screen_height, "Maze 2D");
     defer rl.closeWindow();
 
     rl.setTargetFPS(60);
 
-    var maze = try Maze.init(gpa, width, height);
+    var maze = try Maze.init(gpa, rand, width, height);
     defer maze.deinit(gpa);
-    mazelib.randomize_maze(rand, &maze);
+
+    // We will draw the last 10 positions of the player as a trail
+    var lastPositions = [_]struct { i32, i32, f32 }{.{ 0, 0, 0.0 }} ** 20;
+    lastPositions[0] = .{ maze.x, maze.y, 1.0 };
+    var lastPositionsIndex: usize = 1;
 
     // Main game loop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
         // Update
-        if (rl.isKeyPressed(rl.KeyboardKey.r)) {
-            const start = std.time.milliTimestamp();
-            mazelib.randomize_maze(rand, &maze);
-            const took = std.time.milliTimestamp() - start;
-            std.debug.print("Randomized maze in {}ms\n", .{took});
+
+        // Decrease the alpha of the last positions
+        for (0..lastPositions.len) |i| {
+            lastPositions[i][2] = @max(0.0, lastPositions[i][2] - 0.02);
         }
+
+        if (maze.stepOnce(rand)) {
+            maze.clear(rand);
+        }
+        lastPositions[lastPositionsIndex] = .{ maze.x, maze.y, 1.0 };
+        lastPositionsIndex = (lastPositionsIndex + 1) % lastPositions.len;
 
         // Draw
         rl.beginDrawing();
@@ -55,30 +64,51 @@ pub fn main() anyerror!void {
 
         rl.clearBackground(rl.Color.white);
 
-        draw_maze(maze, cell_size);
+        drawPositions(&lastPositions, cell_size);
+        drawMaze(maze, cell_size);
 
         rl.drawFPS(10, 10);
     }
 }
 
-fn draw_maze(maze: Maze, cell_size: i32) void {
-    var iter = maze.cell_iterator();
+fn drawPositions(lastPositions: []struct { i32, i32, f32 }, cell_size: i32) void {
+    for (lastPositions) |pos| {
+        const x, const y, const alpha = pos;
+        if (x == 0 and y == 0) {
+            continue;
+        }
+
+        const cell_x = x * cell_size;
+        const cell_y = y * cell_size;
+        rl.drawRectangle(cell_x, cell_y, cell_size, cell_size, rl.fade(rl.Color.red, alpha));
+    }
+}
+
+fn drawMaze(maze: Maze, cell_size: i32) void {
+    // Draw the maze
+    var iter = maze.grid.cellIterator();
 
     while (iter.next()) |tuple| {
         const x, const y, const cell = tuple;
         const cell_x = x * cell_size;
         const cell_y = y * cell_size;
 
-        if (cell.has_wall(.North)) {
+        if (cell.visited()) {
+            rl.drawRectangle(cell_x, cell_y, cell_size, cell_size, rl.fade(rl.Color.gray, 0.2));
+        } else {
+            rl.drawRectangle(cell_x, cell_y, cell_size, cell_size, rl.fade(rl.Color.gray, 0.8));
+        }
+
+        if (cell.hasWall(.North) or !cell.visited()) {
             rl.drawLine(cell_x, cell_y, cell_x + cell_size, cell_y, rl.Color.black);
         }
-        if (cell.has_wall(.South)) {
+        if (cell.hasWall(.South) or !cell.visited()) {
             rl.drawLine(cell_x, cell_y + cell_size, cell_x + cell_size, cell_y + cell_size, rl.Color.black);
         }
-        if (cell.has_wall(.East)) {
+        if (cell.hasWall(.East) or !cell.visited()) {
             rl.drawLine(cell_x + cell_size, cell_y, cell_x + cell_size, cell_y + cell_size, rl.Color.black);
         }
-        if (cell.has_wall(.West)) {
+        if (cell.hasWall(.West) or !cell.visited()) {
             rl.drawLine(cell_x, cell_y, cell_x, cell_y + cell_size, rl.Color.black);
         }
     }
