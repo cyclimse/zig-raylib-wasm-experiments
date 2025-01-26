@@ -11,6 +11,10 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    if (target.query.os_tag == .emscripten and optimize == .Debug) {
+        std.debug.print("Emscripten builds can run into 'index out of bounds' in Debug mode. Please use Release mode instead.\n", .{});
+    }
+
     const raylib_dep = b.dependency("raylib-zig", .{
         .target = target,
         .optimize = optimize,

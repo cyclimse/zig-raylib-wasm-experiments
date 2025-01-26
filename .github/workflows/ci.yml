@@ -19,7 +19,7 @@ jobs:
 
       - name: Build static files
         id: build
-        run: nix-shell --run "make build"
+        run: nix-shell --run "make build_release_wasm"
 
       - name: Upload static files as artifact
         id: deployment
