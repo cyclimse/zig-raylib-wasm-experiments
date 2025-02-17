@@ -8,6 +8,7 @@ const programs = [_]struct {
 }{
     .{ .name = "helloworld" },
     .{ .name = "maze2d" },
+    .{ .name = "ballpit" },
 };
 
 pub fn build(b: *std.Build) !void {
@@ -22,9 +23,14 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+    const zlm_dep = b.dependency("zlm", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const raylib = raylib_dep.module("raylib");
     const raylib_artifact = raylib_dep.artifact("raylib");
+    const zlm = zlm_dep.module("zlm");
 
     var last_move_step: ?*std.Build.Step = null;
 
@@ -38,6 +44,7 @@ pub fn build(b: *std.Build) !void {
 
             exe_lib.linkLibrary(raylib_artifact);
             exe_lib.root_module.addImport("raylib", raylib);
+            exe_lib.root_module.addImport("zlm", zlm);
 
             // Note that raylib itself is not actually added to the exe_lib output file, so it also needs to be linked with emscripten.
             const link_step = try rlz.emcc.linkWithEmscripten(b, &[_]*std.Build.Step.Compile{ exe_lib, raylib_artifact });
@@ -82,6 +89,7 @@ pub fn build(b: *std.Build) !void {
 
             exe.linkLibrary(raylib_artifact);
             exe.root_module.addImport("raylib", raylib);
+            exe.root_module.addImport("zlm", zlm);
 
             const run_cmd = b.addRunArtifact(exe);
             const run_step = b.step(run_cmd_name, run_desc);

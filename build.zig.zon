@@ -27,6 +27,10 @@
             .url = "git+https://github.com/Not-Nik/raylib-zig?ref=devel#1ef4995f82686fda7c2eff1c76f26d1200d74760",
             .hash = "12206cf18aea41dc1e61b697c36ef627752e84fe9a9362b800240fce7dea3665094d",
         },
+        .zlm = .{
+            .url = "git+https://github.com/ziglibs/zlm#35b76fae19f9d0a1ed541db621d7c4b3e266087e",
+            .hash = "1220342ac333965de915f74a8425e4848ffe46852da0e4789103f9ec650c3cd22456",
+        },
     },
     .paths = .{
         "build.zig",
