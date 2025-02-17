@@ -239,21 +239,3 @@ const Particle = struct {
         b.pos.y = b.pos.y + a2b.y * (World.Stiffness * overlap * a.mass / ab_mass);
     }
 };
-
-const AABB = struct {
-    top_left: math.Vec2 = math.Vec2.zero,
-    width: f32 = 1.0,
-    height: f32 = 1.0,
-
-    pub fn center(self: AABB) math.Vec2 {
-        return math.Vec2.new(self.top_left.x + self.width / 2, self.top_left.y + self.height / 2);
-    }
-
-    pub fn isColliding(a: AABB, p: Particle) bool {
-        const aabb_center = a.center();
-        const a2b = math.Vec2.new(aabb_center.x - p.pos.x, aabb_center.y - p.pos.y);
-        const a2b_clamp = math.Vec2.new(std.math.clamp(a2b.x, -a.width / 2.0, a.width / 2.0), std.math.clamp(a2b.y, -a.height / 2.0, a.height / 2.0));
-        const dist = math.Vec2.new(aabb_center.x + a2b_clamp.x - p.pos.x, aabb_center.y + a2b_clamp.y - p.pos.y);
-        return dist.x * dist.x + dist.y * dist.y > p.radius * p.radius;
-    }
-};
