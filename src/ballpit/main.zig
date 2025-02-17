@@ -1,4 +1,10 @@
 const std = @import("std");
+const builtin = @import("builtin");
+pub const os = if (builtin.os.tag != .wasi and builtin.os.tag != .emscripten) std.os else struct {
+    pub const heap = struct {
+        pub const page_allocator = std.heap.c_allocator;
+    };
+};
 
 const math = @import("zlm");
 const rl = @import("raylib");

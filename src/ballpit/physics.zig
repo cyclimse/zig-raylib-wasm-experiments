@@ -101,7 +101,7 @@ fn randomFloat(rand: std.rand.Random, min: f32, max: f32) f32 {
 }
 
 pub const World = struct {
-    const N = 1000;
+    const N = 100;
     pub const Stiffness = 0.5;
     const Gravity = -0.2;
     const Iterations = 4;
@@ -204,11 +204,11 @@ pub const World = struct {
             const value = randomFloat(self.rand, 0.6, 0.9);
             p.color = rl.colorFromHSV(hue, saturation, value);
 
-            p.radius = 0.01 * self.rand.floatNorm(f32) + 0.03;
+            p.radius = randomFloat(self.rand, 0.02, 0.15);
             p.mass = Density * p.radius * p.radius;
 
-            p.pos.x = std.math.clamp(2 * self.aspect_ratio * self.rand.float(f32) - self.aspect_ratio, p.radius - self.aspect_ratio, self.aspect_ratio - p.radius);
-            p.pos.y = std.math.clamp(2 * self.rand.float(f32) - 1, p.radius - 1.0, 1.0 - p.radius);
+            p.pos.x = randomFloat(self.rand, -self.aspect_ratio + p.radius, self.aspect_ratio - p.radius);
+            p.pos.y = randomFloat(self.rand, -1.0 + p.radius, 1.0 - p.radius);
             p.pre_pos = p.pos;
         }
     }
